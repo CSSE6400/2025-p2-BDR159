@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from todo.models import db
 from todo.models.todo import Todo
-from datetime import datetime
+from datetime import datetime, timedelta
  
 api = Blueprint('api', __name__, url_prefix='/api/v1') 
 
@@ -24,10 +24,17 @@ def health():
 @api.route('/todos', methods=['GET'])
 def get_todos():
     """Return the list of todo items"""
-    todos = Todo.query.all()
+    completed = request.args.get('completed')
+    window = request.args.get('window')
+    todos = Todo.query
+    if completed is not None:
+        todos = todos.filter(Todo.completed == True)
+    if window is not None:
+        todos = todos.filter(Todo.deadline_at <= datetime.now() + timedelta(days=5))
+    todos = todos.all()
     result = []
     for todo in todos:
-        result.append(todo.to_dict())
+      result.append(todo.to_dict())
     return jsonify(result)
 
 @api.route('/todos/<int:todo_id>', methods=['GET'])
@@ -40,7 +47,12 @@ def get_todo(todo_id):
 
 @api.route('/todos', methods=['POST'])
 def create_todo():
+    valid_fields = ['title', 'description', 'completed', 'deadline_at']
     """Create a new todo item and return the created item"""
+    if not all(key in valid_fields for key in request.json.keys()):
+       return jsonify({'error': 'invalid field present'}), 400
+    if 'title' not in request.json:
+        return jsonify({'error': 'title not found'}), 400
     todo = Todo(
       title=request.json.get('title'),
       description=request.json.get('description'),
@@ -56,6 +68,9 @@ def create_todo():
 @api.route('/todos/<int:todo_id>', methods=['PUT'])
 def update_todo(todo_id):
     """Update a todo item and return the updated item"""
+    valid_fields = ['title', 'description', 'completed', 'deadline_at']
+    if not all(key in valid_fields for key in request.json.keys()):
+       return jsonify({'error': 'invalid field present'}), 400
     todo = Todo.query.get(todo_id)
     if todo is None:
         return jsonify({'error': 'Todo not found'}), 404
